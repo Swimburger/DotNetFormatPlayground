@@ -1,0 +1,220 @@
+@page "/"
+@inject IJSRuntime JS
+
+<PageTitle>.NET Format String Playground</PageTitle>
+
+<main id="main-content" class="lab" aria-labelledby="lab-heading">
+    <section class="workspace-shell" aria-label="Format string playground">
+        <div class="preset-bar">
+            <div class="preset-picker">
+                <label for="preset">Try an example</label>
+                <select id="preset" name="preset" value="@selectedPreset" @onchange="SelectPreset">
+                    @foreach (var preset in Presets) { <option value="@preset.Id">@preset.Label</option> }
+                </select>
+            </div>
+            <button type="button" class="secondary" @onclick="Reset">Reset</button>
+        </div>
+
+        <form class="lab-form" method="get" action="/" aria-labelledby="input-heading" @onsubmit="Analyze" @onsubmit:preventDefault>
+            <section class="input-panel" aria-labelledby="input-heading">
+                <div class="panel-heading"><p class="eyebrow">1 · Define</p><h2 id="input-heading">Choose the exact value .NET should format</h2></div>
+                <div class="field-grid">
+                    <div class="field">
+                        <label for="value-type">.NET type</label>
+                        <select id="value-type" name="value-type" value="@valueType" @onchange="ChangeType">
+                            @foreach (var type in Enum.GetValues<FormatValueType>()) { <option value="@type">@DisplayType(type)</option> }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="culture">Output culture</label>
+                        <select id="culture" name="culture" @bind="cultureName" @bind:after="RunLiveAnalysis">
+                            @foreach (var culture in Cultures) { <option value="@culture.Id">@culture.Label</option> }
+                        </select>
+                    </div>
+                    <div class="field field-wide">
+                        <label for="input-value">Typed value</label>
+                        <p id="input-value-hint" class="hint">@FormatEngine.InputHint(valueType) Input parsing is invariant so culture changes only the output.</p>
+                        <input id="input-value" name="value" value="@input" @oninput="UpdateInput" @onblur="ValidateInput" required
+                               autocapitalize="none" autocorrect="off" spellcheck="false"
+                               aria-describedby="@(showInputError ? "input-value-hint input-value-error" : "input-value-hint")"
+                               aria-invalid="@(showInputError ? "true" : "false")" />
+                        @if (showInputError) { <p id="input-value-error" class="field-error">@result.Error</p> }
+                    </div>
+                </div>
+                <button type="submit" class="primary">Format with .NET</button>
+            </section>
+        </form>
+
+        <section class="results-panel" aria-labelledby="standards-heading">
+            <div class="panel-heading results-heading">
+                <div><p class="eyebrow">2 · Compare</p><h2 id="standards-heading">Standard formats, side by side</h2></div>
+                @if (result.Success) { <span class="success-badge">@DisplayType(valueType)</span> }
+            </div>
+            <div class="result-status @(result.Success ? "success" : showInputError ? "error" : "idle")" role="status" aria-live="polite">
+                @if (result.Success) { <strong>Parsed without losing precision.</strong><span><code>@result.ParsedValue</code></span> }
+                else if (showInputError) { <strong>That value cannot be parsed as @DisplayType(valueType).</strong><span>@result.Error</span> }
+                else { <strong>Ready for a complete value.</strong><span>Finish editing or submit to validate it.</span> }
+            </div>
+            @if (result.Success)
+            {
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="standard-format-caption">
+                    <table>
+                        <caption id="standard-format-caption">Standard formats for @DisplayType(valueType)</caption>
+                        <thead><tr><th scope="col">Format</th><th scope="col">Meaning</th><th scope="col">@CultureLabel</th><th scope="col">Invariant</th></tr></thead>
+                        <tbody>
+                            @foreach (var row in result.StandardFormats)
+                            {
+                                <tr><th scope="row"><button type="button" class="format-token" title="Use @row.Format" @onclick="() => UseFormat(row.Format)"><code>@row.Format</code></button></th><td>@row.Description</td><td><code>@row.CultureResult</code></td><td><code>@row.InvariantResult</code></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="custom-panel" aria-labelledby="custom-heading">
+            <div class="panel-heading"><p class="eyebrow">3 · Compose</p><h2 id="custom-heading">Build a custom format string</h2></div>
+            <div class="custom-grid">
+                <div class="field">
+                    <label for="custom-format">Custom format</label>
+                    <p id="custom-format-hint" class="hint">Edit directly or insert a type-specific pattern below. Preview updates as you type.</p>
+                    <input id="custom-format" name="custom-format" value="@customFormat" @oninput="UpdateCustomFormat" @onblur="TouchCustom"
+                           autocapitalize="none" autocorrect="off" spellcheck="false"
+                           aria-describedby="@(showCustomError ? "custom-format-hint custom-format-error" : "custom-format-hint")"
+                           aria-invalid="@(showCustomError ? "true" : "false")" />
+                    @if (showCustomError) { <p id="custom-format-error" class="field-error">@result.CustomError</p> }
+                </div>
+                <div class="preview-card" aria-live="off">
+                    <span>Live result · @CultureLabel</span>
+                    @if (!result.Success) { <code>Enter a valid @DisplayType(valueType) value</code> }
+                    else if (string.IsNullOrEmpty(customFormat)) { <code>Enter or choose a format</code> }
+                    else if (!string.IsNullOrEmpty(result.CustomError)) { <code>Format is incomplete or invalid</code> }
+                    else { <code>@result.CustomResult</code> }
+                </div>
+            </div>
+            <section class="token-reference" aria-labelledby="tokens-heading">
+                <h3 id="tokens-heading">Reference for @DisplayType(valueType)</h3>
+                <div class="token-grid">
+                    @foreach (var token in result.Tokens)
+                    {
+                        <button type="button" class="token-card" @onclick="() => UseFormat(token.Example)"><code>@token.Token</code><span>@token.Description</span><small>@token.Example</small></button>
+                    }
+                </div>
+            </section>
+        </section>
+
+        <section class="code-panel" aria-labelledby="code-heading">
+            <div class="panel-heading code-heading">
+                <div><p class="eyebrow">4 · Reproduce</p><h2 id="code-heading">Copy production-ready C#</h2></div>
+                <button type="button" class="secondary" @onclick="CopyCurrentCode">@copyState</button>
+            </div>
+            <div class="code-choices" role="group" aria-label="Generated C# style">
+                @foreach (var style in CodeStyles) { <button type="button" class="@(codeStyle == style.Id ? "active" : null)" aria-pressed="@(codeStyle == style.Id)" @onclick="() => codeStyle = style.Id">@style.Label</button> }
+            </div>
+            <pre tabindex="0"><code>@CurrentCode</code></pre>
+        </section>
+    </section>
+
+    <section class="reference" aria-labelledby="reference-heading">
+        <p class="eyebrow">Quick reference</p><h2 id="reference-heading">Format strings change presentation—not meaning</h2>
+        <p class="section-intro">This playground starts with a typed .NET value, then shows how format and culture transform its text. It parses numbers with invariant syntax so huge integers and decimals never pass through JavaScript or silently lose precision.</p>
+        <div class="reference-grid">
+            <article><h3>Standard formats</h3><p>Single-letter specifiers such as <code>N</code>, <code>C</code>, or <code>O</code> select a predefined representation. Their exact output can still depend on culture and type.</p></article>
+            <article><h3>Custom formats</h3><p>Patterns such as <code>#,##0.00</code> or <code>yyyy-MM-dd</code> compose individual tokens. The same character can mean something different for numbers, dates, and durations.</p></article>
+            <article><h3>Culture</h3><p>Culture supplies separators, symbols, names, grouping rules, and ordering. The invariant column makes every culture-dependent difference visible immediately.</p></article>
+            <article><h3>Exact types</h3><p><code>decimal</code>, <code>Int128</code>, and <code>BigInteger</code> are parsed and formatted inside .NET. No JavaScript <code>Number</code> conversion sits in the middle.</p></article>
+        </div>
+        <aside class="handoff-card" aria-labelledby="datetime-heading"><h3 id="datetime-heading">Need to parse or convert a timestamp?</h3><p>This tool deliberately focuses on presentation. Use the <a href="https://datetime.swimburger.net">.NET DateTime Lab</a> to inspect <code>Kind</code>, offsets, time zones, ambiguous times, invalid times, and UTC conversions.</p></aside>
+        <aside class="docs-card" aria-labelledby="docs-heading">
+            <h3 id="docs-heading">Continue with the source documentation</h3>
+            <ul>
+                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/formatting-types">Formatting types in .NET</a></li>
+                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/standard-numeric-format-strings">Standard numeric format strings</a></li>
+                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-numeric-format-strings">Custom numeric format strings</a></li>
+                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings">Custom date and time format strings</a></li>
+                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-timespan-format-strings">Custom TimeSpan format strings</a></li>
+            </ul>
+        </aside>
+    </section>
+</main>
+
+@code {
+    private static readonly Choice[] Cultures =
+    [
+        new("en-US", "en-US · English (United States)"), new("en-GB", "en-GB · English (United Kingdom)"), new("nl-BE", "nl-BE · Dutch (Belgium)"),
+        new("fr-FR", "fr-FR · French (France)"), new("de-DE", "de-DE · German (Germany)"), new("ja-JP", "ja-JP · Japanese (Japan)"),
+        new("ar-EG", "ar-EG · Arabic (Egypt)"), new("", "Invariant culture")
+    ];
+    private static readonly Preset[] Presets =
+    [
+        new("money", "decimal · money without binary drift", FormatValueType.Decimal, "1234567.890123456789", "en-US", "C2"),
+        new("big", "BigInteger · beyond JavaScript precision", FormatValueType.BigInteger, "1234567890123456789012345678901234567890", "de-DE", "#,##0 'units'"),
+        new("int128", "Int128 · minimum-range scale", FormatValueType.Int128, "-170141183460469231731687303715884105728", "en-US", "N0"),
+        new("percent", "double · percentage", FormatValueType.Double, "0.12345", "fr-FR", "0.00%"),
+        new("date", "DateTime · names and ordering", FormatValueType.DateTime, "2026-11-26T14:30:15.1234567Z", "nl-BE", "dddd d MMMM yyyy 'om' HH:mm"),
+        new("offset", "DateTimeOffset · preserve the offset", FormatValueType.DateTimeOffset, "2026-11-26T14:30:15.1234567-05:00", "en-US", "yyyy-MM-dd HH:mm:ss.fffffff zzz"),
+        new("duration", "TimeSpan · escaped separators", FormatValueType.TimeSpan, "2.03:04:05.6789000", "en-US", @"d'.'hh\:mm\:ss'.'fffffff"),
+        new("guid", "Guid · compact identifier", FormatValueType.Guid, "2f1c9e7b-37b5-4f29-a7d6-11de23cab987", "en-US", "N")
+    ];
+    private static readonly Choice[] CodeStyles = [new("interpolation", "Interpolation"), new("tostring", "ToString"), new("stringformat", "string.Format")];
+
+    private string selectedPreset = Presets[0].Id;
+    private string input = Presets[0].Input;
+    private FormatValueType valueType = Presets[0].Type;
+    private string cultureName = Presets[0].Culture;
+    private string customFormat = Presets[0].Format;
+    private FormatResult result = new();
+    private bool attempted;
+    private bool customTouched;
+    private string codeStyle = "interpolation";
+    private string copyState = "Copy C#";
+
+    private bool showInputError => attempted && !result.Success;
+    private bool showCustomError => customTouched && result.Success && !string.IsNullOrEmpty(result.CustomError);
+    private string CultureLabel => string.IsNullOrEmpty(cultureName) ? "Invariant" : cultureName;
+    private string CurrentCode => codeStyle switch { "tostring" => result.ToStringCode, "stringformat" => result.StringFormatCode, _ => result.InterpolationCode };
+
+    protected override void OnInitialized() => RunAnalysis();
+    private void Analyze() { attempted = true; customTouched = true; RunAnalysis(); }
+    private Task RunLiveAnalysis() { RunAnalysis(); return Task.CompletedTask; }
+    private void RunAnalysis() { result = FormatEngine.Format(new(input, valueType, cultureName, customFormat)); copyState = "Copy C#"; }
+    private void UpdateInput(ChangeEventArgs args) { input = args.Value?.ToString() ?? string.Empty; attempted = false; RunAnalysis(); }
+    private void ValidateInput() { attempted = true; RunAnalysis(); }
+    private void TouchCustom() { customTouched = true; }
+    private void UpdateCustomFormat(ChangeEventArgs args) { customFormat = args.Value?.ToString() ?? string.Empty; customTouched = false; RunAnalysis(); }
+    private void UseFormat(string format) { customFormat = format; customTouched = true; RunAnalysis(); }
+
+    private void ChangeType(ChangeEventArgs args)
+    {
+        if (!Enum.TryParse<FormatValueType>(args.Value?.ToString(), out var selected)) return;
+        valueType = selected;
+        var preset = Presets.FirstOrDefault(item => item.Type == selected);
+        input = preset?.Input ?? DefaultInput(selected);
+        customFormat = preset?.Format ?? DefaultFormat(selected);
+        attempted = false; customTouched = false; RunAnalysis();
+    }
+
+    private void SelectPreset(ChangeEventArgs args) { selectedPreset = args.Value?.ToString() ?? Presets[0].Id; ApplyPreset(Presets.First(item => item.Id == selectedPreset)); }
+    private void Reset() { selectedPreset = Presets[0].Id; ApplyPreset(Presets[0]); }
+    private void ApplyPreset(Preset preset) { valueType = preset.Type; input = preset.Input; cultureName = preset.Culture; customFormat = preset.Format; attempted = true; customTouched = true; RunAnalysis(); }
+
+    private async Task CopyCurrentCode()
+    {
+        try { copyState = await JS.InvokeAsync<bool>("formatPlayground.copyText", CurrentCode) ? "Copied" : "Copy failed"; }
+        catch (JSException) { copyState = "Copy failed"; }
+    }
+
+    private static string DisplayType(FormatValueType type) => type switch { FormatValueType.Int32 => "int (Int32)", FormatValueType.Int64 => "long (Int64)", _ => type.ToString() };
+    private static string DefaultInput(FormatValueType type) => type switch
+    {
+        FormatValueType.Int32 => "-1234567", FormatValueType.Int64 => "9223372036854775807", FormatValueType.DateOnly => "2026-11-26",
+        FormatValueType.TimeOnly => "14:30:15.1234567", _ => "1234.5"
+    };
+    private static string DefaultFormat(FormatValueType type) => type switch
+    {
+        FormatValueType.DateOnly => "yyyy-MM-dd", FormatValueType.TimeOnly => "HH:mm:ss.fffffff", FormatValueType.Guid => "D", _ => "#,##0.00"
+    };
+
+    private sealed record Choice(string Id, string Label);
+    private sealed record Preset(string Id, string Label, FormatValueType Type, string Input, string Culture, string Format);
+}

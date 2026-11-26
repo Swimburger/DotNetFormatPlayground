@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DotNetFormatPlayground.Core/DotNetFormatPlayground.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DotNetFormatPlayground.Tests/DotNetFormatPlayground.Tests.csproj" />
+  </Folder>
+  <Project Path="DotNetFormatPlayground.csproj" />
+</Solution>
