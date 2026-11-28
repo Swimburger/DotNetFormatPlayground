@@ -4,6 +4,7 @@ async function openPlayground(page) {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: ".NET Format String Tester", exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("button", { name: "Format with .NET" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: ".NET Format String Tester" })).toHaveCSS("outline-style", "none");
 }
 
 test("compares culture and invariant standard formats", async ({ page }) => {
