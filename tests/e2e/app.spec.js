@@ -30,10 +30,58 @@ test("updates the custom preview and generated code", async ({ page }) => {
   await openPlayground(page);
   const format = page.getByRole("textbox", { name: "Custom format", exact: true });
   await format.fill("0000000000.0000");
-  await expect(page.locator(".preview-card code")).toHaveText("0001234567.8901");
+  await expect(page.locator(".culture-comparison div").first()).toContainText("0001234567.8901");
   await page.getByText("C# for this result").click();
   await page.getByRole("button", { name: "string.Format" }).click();
   await expect(page.locator(".code-panel pre")).toContainText("string.Format(culture");
+});
+
+test("standard format actions populate the editor and compare cultures", async ({ page }) => {
+  await openPlayground(page);
+  await page.getByRole("button", { name: "Use Currency format C" }).click();
+  await expect(page.getByRole("textbox", { name: "Custom format" })).toHaveValue("C");
+  await expect(page.locator(".culture-comparison")).toContainText("en-US");
+  await expect(page.locator(".culture-comparison")).toContainText("Invariant");
+  await expect(page.locator(".culture-comparison")).toContainText("fr-FR");
+});
+
+test("shares fragment-only state and restores it on reload", async ({ page }) => {
+  await page.addInitScript(() => {
+    globalThis.__copiedText = "";
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async value => { globalThis.__copiedText = value; } } });
+  });
+  await openPlayground(page);
+  await page.getByLabel("Typed value").fill("9876.543");
+  await page.getByRole("textbox", { name: "Custom format" }).fill("N3");
+  await page.getByRole("button", { name: "Copy link" }).click();
+  const copied = await page.evaluate(() => globalThis.__copiedText);
+  expect(copied).toContain("#state=");
+  expect(new URL(copied).search).toBe("");
+  await page.goto(copied);
+  await expect(page.getByLabel("Typed value")).toHaveValue("9876.543");
+  await expect(page.getByRole("textbox", { name: "Custom format" })).toHaveValue("N3");
+});
+
+test("remember is opt-in, persists locally, and can be forgotten", async ({ page }) => {
+  await openPlayground(page);
+  const remember = page.getByRole("checkbox", { name: "Remember this work on this device" });
+  await expect(remember).not.toBeChecked();
+  await remember.check();
+  await page.getByLabel("Typed value").fill("42.25");
+  await page.reload();
+  await expect(page.getByLabel("Typed value")).toHaveValue("42.25");
+  await page.getByRole("button", { name: "Forget saved work" }).click();
+  await expect(remember).not.toBeChecked();
+  await page.reload();
+  await expect(page.getByLabel("Typed value")).not.toHaveValue("42.25");
+});
+
+test("Ctrl+Enter formats while the visible submit action remains", async ({ page }) => {
+  await openPlayground(page);
+  await page.getByLabel("Typed value").focus();
+  await page.keyboard.press("Control+Enter");
+  await expect(page.getByRole("status").filter({ hasText: "Formatted with .NET." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Format with .NET" })).toBeVisible();
 });
 
 test("validates only after interaction and links to the DateTime lab", async ({ page }) => {
@@ -55,6 +103,11 @@ test("is semantic, responsive, and served with production headers", async ({ pag
   await expect(page.locator("table caption")).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await expect(page.locator(".site-footer")).toContainText("processed locally");
+  const tokens = await page.evaluate(() => {
+    const styles = getComputedStyle(document.documentElement);
+    return [styles.getPropertyValue("--brand-mid").trim(), styles.getPropertyValue("--focus").trim(), styles.getPropertyValue("--page").trim()];
+  });
+  expect(tokens).toEqual(["#a02c56", "#ff91c8", "#17141a"]);
 
   const root = await request.get("/");
   expect(root.status()).toBe(200);

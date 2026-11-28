@@ -1,9 +1,10 @@
 @page "/"
 @inject IJSRuntime JS
+@using System.Text.Json
 
 <PageTitle>.NET Format String Tester</PageTitle>
 
-<main id="main-content" class="tool" aria-labelledby="lab-heading">
+<main id="main-content" class="tool" aria-labelledby="lab-heading" @onkeydown="HandleKeyDown">
     <section class="tool-controls" aria-label="Format string tester">
         <div class="preset-bar">
             <div class="preset-picker">
@@ -12,8 +13,18 @@
                     @foreach (var preset in Presets) { <option value="@preset.Id">@preset.Label</option> }
                 </select>
             </div>
-            <button type="button" class="secondary" @onclick="Reset">Reset</button>
+            <div class="utility-actions">
+                <button type="button" class="secondary" @onclick="CopyLink">Copy link</button>
+                <button type="button" class="secondary" @onclick="Reset">Reset</button>
+            </div>
         </div>
+
+        <div class="memory-row">
+            <label><input type="checkbox" checked="@rememberOnDevice" @onchange="ToggleRemember" /> Remember this work on this device</label>
+            @if (rememberOnDevice) { <button type="button" class="text-button" @onclick="ForgetSavedWork">Forget saved work</button> }
+            <span class="hint">Off by default. Shared links keep their state in the URL fragment.</span>
+        </div>
+        <p class="action-status" role="status" aria-live="polite">@actionStatus</p>
 
         <form class="tool-form" method="get" action="/" aria-labelledby="input-heading" @onsubmit="Analyze" @onsubmit:preventDefault>
                 <h2 id="input-heading">Format a .NET value</h2>
@@ -29,6 +40,7 @@
                         <select id="culture" name="culture" @bind="cultureName" @bind:after="RunLiveAnalysis">
                             @foreach (var culture in Cultures) { <option value="@culture.Id">@culture.Label</option> }
                         </select>
+                        <a class="field-doc" href="https://learn.microsoft.com/dotnet/api/system.globalization.cultureinfo">CultureInfo reference</a>
                     </div>
                     <div class="field field-wide">
                         <label for="input-value">Typed value</label>
@@ -50,16 +62,26 @@
                            aria-describedby="@(showCustomError ? "custom-format-hint custom-format-error" : "custom-format-hint")"
                            aria-invalid="@(showCustomError ? "true" : "false")" />
                     @if (showCustomError) { <p id="custom-format-error" class="field-error">@result.CustomError</p> }
+                    <a class="field-doc" href="@FormatDocumentationUrl">Format-string documentation for this type</a>
                 </div>
-                <output class="preview-card" aria-live="off">
-                    <span>Output · @CultureLabel</span>
-                    @if (!result.Success) { <code>Enter a valid @DisplayType(valueType) value</code> }
-                    else if (string.IsNullOrEmpty(customFormat)) { <code>Enter or choose a format</code> }
-                    else if (!string.IsNullOrEmpty(result.CustomError)) { <code>Format is incomplete or invalid</code> }
-                    else { <code>@result.CustomResult</code> }
-                </output>
+                <div class="preview-card" aria-live="off">
+                    <span>Output comparison</span>
+                    @if (!CanShowCustomOutput) { <code>@PreviewMessage</code> }
+                    else
+                    {
+                        <dl class="culture-comparison">
+                            <div><dt>@CultureLabel</dt><dd><code>@result.CustomResult</code></dd></div>
+                            <div><dt>Invariant</dt><dd><code>@invariantCustomResult</code></dd></div>
+                            <div><dt>@comparisonCultureName</dt><dd><code>@comparisonCustomResult</code></dd></div>
+                        </dl>
+                    }
+                </div>
             </div>
-            <button type="submit" class="primary">Format with .NET</button>
+            <div class="primary-actions">
+                <button type="submit" class="primary">Format with .NET</button>
+                <button type="button" class="secondary" @onclick="CopyOutput" disabled="@(!CanShowCustomOutput)">Copy output</button>
+                <span class="shortcut-hint"><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd></span>
+            </div>
             </section>
         </form>
     </section>
@@ -80,7 +102,7 @@
                     <tbody>
                         @foreach (var row in result.StandardFormats)
                         {
-                            <tr><th scope="row"><button type="button" class="format-token" title="Use @row.Format" @onclick="() => UseFormat(row.Format)"><code>@row.Format</code></button></th><td>@row.Description</td><td><code>@row.CultureResult</code></td><td><code>@row.InvariantResult</code></td></tr>
+                            <tr><th scope="row"><button type="button" class="format-token" aria-label="Use @row.Description format @row.Format" @onclick="() => UseFormat(row.Format)"><code>@row.Format</code></button></th><td>@row.Description</td><td><code>@row.CultureResult</code></td><td><code>@row.InvariantResult</code></td></tr>
                         }
                     </tbody>
                 </table>
@@ -91,8 +113,9 @@
     <details class="reference token-reference">
         <summary id="tokens-heading">Format token reference for @DisplayType(valueType)</summary>
         <div class="disclosure-body">
+                <div class="field token-filter"><label for="token-filter">Filter tokens</label><input id="token-filter" type="search" value="@tokenFilter" @oninput="FilterTokens" autocomplete="off" /></div>
                 <div class="token-grid">
-                    @foreach (var token in result.Tokens)
+                    @foreach (var token in FilteredTokens)
                     {
                         <button type="button" class="token-card" @onclick="() => UseFormat(token.Example)"><code>@token.Token</code><span>@token.Description</span><small>@token.Example</small></button>
                     }
@@ -133,10 +156,14 @@
     private static readonly Preset[] Presets =
     [
         new("money", "decimal · money without binary drift", FormatValueType.Decimal, "1234567.890123456789", "en-US", "C2"),
+        new("percent-scale", "decimal · percent multiplies by 100", FormatValueType.Decimal, "12.345", "en-US", "0.00%"),
+        new("comma-scale", "decimal · scaling comma surprise", FormatValueType.Decimal, "123456789", "en-US", "0,, 'million'"),
+        new("double-roundtrip", "double · expose stored precision", FormatValueType.Double, "0.1", "en-US", "G17"),
         new("big", "BigInteger · beyond JavaScript precision", FormatValueType.BigInteger, "1234567890123456789012345678901234567890", "de-DE", "#,##0 'units'"),
         new("int128", "Int128 · minimum-range scale", FormatValueType.Int128, "-170141183460469231731687303715884105728", "en-US", "N0"),
         new("percent", "double · percentage", FormatValueType.Double, "0.12345", "fr-FR", "0.00%"),
         new("date", "DateTime · names and ordering", FormatValueType.DateTime, "2026-11-26T14:30:15.1234567Z", "nl-BE", "dddd d MMMM yyyy 'om' HH:mm"),
+        new("month-minute", "DateTime · MM month versus mm minute", FormatValueType.DateTime, "2026-11-26T14:30:15Z", "en-US", "yyyy-mm-dd 'should be' yyyy-MM-dd"),
         new("offset", "DateTimeOffset · preserve the offset", FormatValueType.DateTimeOffset, "2026-11-26T14:30:15.1234567-05:00", "en-US", "yyyy-MM-dd HH:mm:ss.fffffff zzz"),
         new("duration", "TimeSpan · escaped separators", FormatValueType.TimeSpan, "2.03:04:05.6789000", "en-US", @"d'.'hh\:mm\:ss'.'fffffff"),
         new("guid", "Guid · compact identifier", FormatValueType.Guid, "2f1c9e7b-37b5-4f29-a7d6-11de23cab987", "en-US", "N")
@@ -153,40 +180,139 @@
     private bool customTouched;
     private string codeStyle = "interpolation";
     private string copyState = "Copy C#";
+    private string actionStatus = string.Empty;
+    private string invariantCustomResult = string.Empty;
+    private string comparisonCustomResult = string.Empty;
+    private string comparisonCultureName = "fr-FR";
+    private string tokenFilter = string.Empty;
+    private bool rememberOnDevice;
+    private bool browserStateLoaded;
 
     private bool showInputError => attempted && !result.Success;
     private bool showCustomError => customTouched && result.Success && !string.IsNullOrEmpty(result.CustomError);
     private string CultureLabel => string.IsNullOrEmpty(cultureName) ? "Invariant" : cultureName;
     private string CurrentCode => codeStyle switch { "tostring" => result.ToStringCode, "stringformat" => result.StringFormatCode, _ => result.InterpolationCode };
+    private bool CanShowCustomOutput => result.Success && !string.IsNullOrEmpty(customFormat) && string.IsNullOrEmpty(result.CustomError);
+    private string PreviewMessage => !result.Success ? $"Enter a valid {DisplayType(valueType)} value" : string.IsNullOrEmpty(customFormat) ? "Enter or choose a format" : "Format is incomplete or invalid";
+    private IEnumerable<FormatToken> FilteredTokens => string.IsNullOrWhiteSpace(tokenFilter) ? result.Tokens : result.Tokens.Where(token => token.Token.Contains(tokenFilter, StringComparison.OrdinalIgnoreCase) || token.Description.Contains(tokenFilter, StringComparison.OrdinalIgnoreCase) || token.Example.Contains(tokenFilter, StringComparison.OrdinalIgnoreCase));
+    private string FormatDocumentationUrl => valueType switch
+    {
+        FormatValueType.DateTime or FormatValueType.DateTimeOffset or FormatValueType.DateOnly or FormatValueType.TimeOnly => "https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings",
+        FormatValueType.TimeSpan => "https://learn.microsoft.com/dotnet/standard/base-types/custom-timespan-format-strings",
+        FormatValueType.Guid => "https://learn.microsoft.com/dotnet/api/system.guid.tostring",
+        _ => "https://learn.microsoft.com/dotnet/standard/base-types/custom-numeric-format-strings"
+    };
 
     protected override void OnInitialized() => RunAnalysis();
-    private void Analyze() { attempted = true; customTouched = true; RunAnalysis(); }
-    private Task RunLiveAnalysis() { RunAnalysis(); return Task.CompletedTask; }
-    private void RunAnalysis() { result = FormatEngine.Format(new(input, valueType, cultureName, customFormat)); copyState = "Copy C#"; }
-    private void UpdateInput(ChangeEventArgs args) { input = args.Value?.ToString() ?? string.Empty; attempted = false; RunAnalysis(); }
-    private void ValidateInput() { attempted = true; RunAnalysis(); }
-    private void TouchCustom() { customTouched = true; }
-    private void UpdateCustomFormat(ChangeEventArgs args) { customFormat = args.Value?.ToString() ?? string.Empty; customTouched = false; RunAnalysis(); }
-    private void UseFormat(string format) { customFormat = format; customTouched = true; RunAnalysis(); }
 
-    private void ChangeType(ChangeEventArgs args)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            rememberOnDevice = await JS.InvokeAsync<bool>("formatPlayground.isRememberEnabled");
+            var saved = await JS.InvokeAsync<string?>("formatPlayground.loadInitialState");
+            if (!string.IsNullOrWhiteSpace(saved)) ApplySerializedState(saved);
+        }
+        catch (JSException) { actionStatus = "Browser storage is unavailable; the tester still works without it."; }
+        browserStateLoaded = true;
+        RunAnalysis();
+        StateHasChanged();
+    }
+
+    private async Task Analyze() { attempted = true; customTouched = true; RunAnalysis(); actionStatus = "Formatted with .NET."; await PersistIfEnabled(); }
+    private async Task RunLiveAnalysis() { RunAnalysis(); await PersistIfEnabled(); }
+    private void RunAnalysis()
+    {
+        result = FormatEngine.Format(new(input, valueType, cultureName, customFormat));
+        comparisonCultureName = cultureName == "fr-FR" ? "ja-JP" : "fr-FR";
+        invariantCustomResult = FormatEngine.Format(new(input, valueType, string.Empty, customFormat)).CustomResult;
+        comparisonCustomResult = FormatEngine.Format(new(input, valueType, comparisonCultureName, customFormat)).CustomResult;
+        copyState = "Copy C#";
+    }
+    private async Task UpdateInput(ChangeEventArgs args) { input = args.Value?.ToString() ?? string.Empty; attempted = false; RunAnalysis(); await PersistIfEnabled(); }
+    private async Task ValidateInput() { attempted = true; RunAnalysis(); await PersistIfEnabled(); }
+    private void TouchCustom() { customTouched = true; }
+    private async Task UpdateCustomFormat(ChangeEventArgs args) { customFormat = args.Value?.ToString() ?? string.Empty; customTouched = false; RunAnalysis(); await PersistIfEnabled(); }
+    private async Task UseFormat(string format) { customFormat = format; customTouched = true; RunAnalysis(); await PersistIfEnabled(); }
+    private void FilterTokens(ChangeEventArgs args) => tokenFilter = args.Value?.ToString() ?? string.Empty;
+
+    private async Task ChangeType(ChangeEventArgs args)
     {
         if (!Enum.TryParse<FormatValueType>(args.Value?.ToString(), out var selected)) return;
         valueType = selected;
         var preset = Presets.FirstOrDefault(item => item.Type == selected);
         input = preset?.Input ?? DefaultInput(selected);
         customFormat = preset?.Format ?? DefaultFormat(selected);
-        attempted = false; customTouched = false; RunAnalysis();
+        attempted = false; customTouched = false; RunAnalysis(); await PersistIfEnabled();
     }
 
-    private void SelectPreset(ChangeEventArgs args) { selectedPreset = args.Value?.ToString() ?? Presets[0].Id; ApplyPreset(Presets.First(item => item.Id == selectedPreset)); }
-    private void Reset() { selectedPreset = Presets[0].Id; ApplyPreset(Presets[0]); }
+    private async Task SelectPreset(ChangeEventArgs args) { selectedPreset = args.Value?.ToString() ?? Presets[0].Id; ApplyPreset(Presets.First(item => item.Id == selectedPreset)); await PersistIfEnabled(); }
+    private async Task Reset() { selectedPreset = Presets[0].Id; ApplyPreset(Presets[0]); actionStatus = "Reset to the default example."; await PersistIfEnabled(); }
     private void ApplyPreset(Preset preset) { valueType = preset.Type; input = preset.Input; cultureName = preset.Culture; customFormat = preset.Format; attempted = true; customTouched = true; RunAnalysis(); }
 
     private async Task CopyCurrentCode()
     {
         try { copyState = await JS.InvokeAsync<bool>("formatPlayground.copyText", CurrentCode) ? "Copied" : "Copy failed"; }
         catch (JSException) { copyState = "Copy failed"; }
+    }
+
+    private async Task CopyOutput()
+    {
+        var value = result.CustomResult;
+        try { actionStatus = await JS.InvokeAsync<bool>("formatPlayground.copyText", value) ? "Output copied." : "Copy output failed."; }
+        catch (JSException) { actionStatus = "Copy output failed."; }
+    }
+
+    private async Task CopyLink()
+    {
+        try { actionStatus = await JS.InvokeAsync<bool>("formatPlayground.copyLink", SerializeState()) ? "Share link copied. Its state stays in the URL fragment." : "The current state is too large to share or clipboard access was denied."; }
+        catch (JSException) { actionStatus = "Copy link failed."; }
+    }
+
+    private async Task ToggleRemember(ChangeEventArgs args)
+    {
+        rememberOnDevice = args.Value is bool value && value;
+        try
+        {
+            await JS.InvokeVoidAsync("formatPlayground.saveRememberedState", rememberOnDevice, rememberOnDevice ? SerializeState() : null);
+            actionStatus = rememberOnDevice ? "This work will be remembered on this device." : "Saved work was removed.";
+        }
+        catch (JSException) { rememberOnDevice = false; actionStatus = "Browser storage is unavailable."; }
+    }
+
+    private async Task ForgetSavedWork()
+    {
+        rememberOnDevice = false;
+        try { await JS.InvokeVoidAsync("formatPlayground.saveRememberedState", false, null); actionStatus = "Saved work was removed from this device."; }
+        catch (JSException) { actionStatus = "Browser storage could not be cleared."; }
+    }
+
+    private async Task PersistIfEnabled()
+    {
+        if (!browserStateLoaded || !rememberOnDevice) return;
+        try { await JS.InvokeVoidAsync("formatPlayground.saveRememberedState", true, SerializeState()); }
+        catch (JSException) { actionStatus = "This change could not be saved on the device."; }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && (args.CtrlKey || args.MetaKey)) await Analyze();
+    }
+
+    private string SerializeState() => JsonSerializer.Serialize(new SharedState(1, valueType.ToString(), input, cultureName, customFormat, selectedPreset));
+
+    private void ApplySerializedState(string json)
+    {
+        try
+        {
+            var state = JsonSerializer.Deserialize<SharedState>(json);
+            if (state is null || state.Version != 1 || state.Input.Length > 250_000 || state.Format.Length > 20_000 || !Enum.TryParse<FormatValueType>(state.Type, out var parsedType) || !Cultures.Any(item => item.Id == state.Culture)) return;
+            valueType = parsedType; input = state.Input; cultureName = state.Culture; customFormat = state.Format;
+            selectedPreset = Presets.Any(item => item.Id == state.Preset) ? state.Preset : Presets[0].Id;
+            attempted = true; customTouched = true;
+        }
+        catch (JsonException) { actionStatus = "The shared state was invalid, so the default example was loaded."; }
     }
 
     private static string DisplayType(FormatValueType type) => type switch { FormatValueType.Int32 => "int (Int32)", FormatValueType.Int64 => "long (Int64)", _ => type.ToString() };
@@ -202,4 +328,5 @@
 
     private sealed record Choice(string Id, string Label);
     private sealed record Preset(string Id, string Label, FormatValueType Type, string Input, string Culture, string Format);
+    private sealed record SharedState(int Version, string Type, string Input, string Culture, string Format, string Preset);
 }

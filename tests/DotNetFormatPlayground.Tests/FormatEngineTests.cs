@@ -51,6 +51,7 @@ public sealed class FormatEngineTests
 
         Assert.True(result.Success);
         Assert.NotEmpty(result.CustomError);
+        Assert.Contains("Escape literal separators", result.CustomError);
         Assert.Equal("2.03:04:05", result.ParsedValue);
     }
 

@@ -74,7 +74,7 @@ public static class FormatEngine
         if (!string.IsNullOrEmpty(request.CustomFormat))
         {
             try { customResult = FormatValue(value!, request.CustomFormat, culture); }
-            catch (FormatException exception) { customError = exception.Message; }
+            catch (FormatException exception) { customError = $"{exception.Message} {CustomFormatHelp(request.ValueType)}"; }
         }
 
         return new FormatResult
@@ -107,6 +107,14 @@ public static class FormatEngine
         FormatValueType.TimeSpan => "Invariant duration, for example 2.03:04:05.6789000.",
         FormatValueType.Guid => "A GUID in D, N, B, P, or X form.",
         _ => string.Empty
+    };
+
+    private static string CustomFormatHelp(FormatValueType type) => type switch
+    {
+        FormatValueType.DateTime or FormatValueType.DateTimeOffset or FormatValueType.DateOnly or FormatValueType.TimeOnly => "Check unmatched quotes and remember that MM is month while mm is minute.",
+        FormatValueType.TimeSpan => @"Escape literal separators (for example hh\:mm\:ss) or quote them.",
+        FormatValueType.Guid => "Guid accepts only D, N, B, P, or X format specifiers.",
+        _ => "Check unmatched quotes, section separators, and escaped literal characters."
     };
 
     public static IReadOnlyList<FormatToken> TokensFor(FormatValueType type) => type switch

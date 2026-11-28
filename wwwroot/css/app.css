@@ -33,6 +33,12 @@ button.primary:hover:not(:disabled) { background: var(--brand-dark); }
 .tool { flex: 1; padding-block: 1.5rem 2.5rem; }
 .tool-controls { border-bottom: 1px solid var(--border); padding-block-end: 1.5rem; }
 .preset-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .6rem; align-items: end; margin-block-end: 1.25rem; }
+.utility-actions, .primary-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.memory-row { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1rem; margin-block: -.45rem 1rem; padding-block-end: .8rem; border-bottom: 1px solid var(--border); }
+.memory-row label { display: inline-flex; align-items: center; gap: .45rem; font-size: .86rem; font-weight: 650; }
+.memory-row input { inline-size: 1.15rem; block-size: 1.15rem; min-height: 1.15rem; padding: 0; }
+.text-button { min-height: 30px; border: 0; padding: .2rem 0; background: transparent; color: var(--link); text-decoration: underline; }
+.action-status { min-height: 1.35rem; margin: -.5rem 0 .75rem; color: var(--muted); font-size: .82rem; }
 .preset-picker { display: grid; grid-template-columns: auto minmax(13rem, 32rem); gap: .65rem; align-items: center; }
 .preset-picker label { color: var(--muted); font-size: .84rem; font-weight: 700; }
 .tool-form h2, .results-panel h2 { margin: 0 0 .8rem; font-size: 1.15rem; }
@@ -42,6 +48,7 @@ button.primary:hover:not(:disabled) { background: var(--brand-dark); }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 .8rem; }
 .field-wide { grid-column: 1 / -1; }
 .hint { margin: 0; color: var(--muted); font-size: .82rem; }
+.field-doc { align-self: flex-start; font-size: .78rem; }
 .field-error { margin: 0; color: var(--danger); font-weight: 650; }
 input[aria-invalid="true"] { border-color: var(--danger); border-width: 2px; }
 .custom-panel { border-top: 1px solid var(--border); padding-block-start: 1rem; }
@@ -49,6 +56,13 @@ input[aria-invalid="true"] { border-color: var(--danger); border-width: 2px; }
 .preview-card { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: .35rem; margin-block-end: 1rem; border-inline-start: 4px solid var(--brand-mid); padding: .75rem .9rem; background: #0d1117; }
 .preview-card span { color: var(--muted); font-size: .78rem; font-weight: 700; }
 .preview-card code { color: #e6edf3; font-size: clamp(1rem, .9rem + .6vw, 1.3rem); }
+.culture-comparison { display: grid; gap: .55rem; margin: .15rem 0 0; }
+.culture-comparison div { display: grid; grid-template-columns: minmax(5rem, auto) minmax(0, 1fr); gap: .75rem; border-top: 1px solid var(--border); padding-block-start: .4rem; }
+.culture-comparison dt { color: var(--muted); font-size: .78rem; font-weight: 700; }
+.culture-comparison dd { min-width: 0; margin: 0; }
+.culture-comparison code { font-size: .92rem; }
+.shortcut-hint { color: var(--muted); font-size: .76rem; }
+kbd { border: 1px solid var(--border); border-radius: .2rem; padding: .05rem .25rem; background: var(--surface); font-family: inherit; }
 .tool-form > .custom-panel > .primary { min-width: 12rem; }
 .results-panel { padding-block: 1.5rem; border-bottom: 1px solid var(--border); }
 .result-status { display: grid; gap: .15rem; margin-block-end: .85rem; border-inline-start: 4px solid var(--border); padding: .7rem .8rem; background: var(--surface); }
@@ -66,6 +80,7 @@ tbody th { white-space: nowrap; }
 .reference summary { min-height: 48px; box-sizing: border-box; padding-block: .75rem; color: var(--link); font-weight: 700; cursor: pointer; }
 .disclosure-body { padding-block: .35rem 1rem; }
 .token-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; }
+.token-filter { max-width: 24rem; }
 .token-card { display: grid; min-height: 5rem; grid-template-columns: auto 1fr; gap: .15rem .55rem; align-content: start; padding: .65rem; text-align: start; }
 .token-card code { grid-row: 1 / span 2; color: var(--link); font-weight: 800; }
 .token-card span { font-size: .8rem; }
@@ -89,6 +104,9 @@ tbody th { white-space: nowrap; }
     .tool, .footer-inner { width: min(100% - 1.25rem, 960px); }
     .preset-bar, .preset-picker, .field-grid, .custom-grid, .token-grid { grid-template-columns: 1fr; }
     .preset-bar button, .tool-form > .custom-panel > .primary { width: 100%; }
+    .utility-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .primary-actions { display: grid; grid-template-columns: 1fr; }
+    .primary-actions button { width: 100%; }
     .field-wide { grid-column: auto; }
     .footer-inner { align-items: flex-start; flex-direction: column; gap: .6rem; }
     .footer-inner small { margin: 0; text-align: start; }
