@@ -1,10 +1,10 @@
 @page "/"
 @inject IJSRuntime JS
 
-<PageTitle>.NET Format String Playground</PageTitle>
+<PageTitle>.NET Format String Tester</PageTitle>
 
-<main id="main-content" class="lab" aria-labelledby="lab-heading">
-    <section class="workspace-shell" aria-label="Format string playground">
+<main id="main-content" class="tool" aria-labelledby="lab-heading">
+    <section class="tool-controls" aria-label="Format string tester">
         <div class="preset-bar">
             <div class="preset-picker">
                 <label for="preset">Try an example</label>
@@ -15,9 +15,8 @@
             <button type="button" class="secondary" @onclick="Reset">Reset</button>
         </div>
 
-        <form class="lab-form" method="get" action="/" aria-labelledby="input-heading" @onsubmit="Analyze" @onsubmit:preventDefault>
-            <section class="input-panel" aria-labelledby="input-heading">
-                <div class="panel-heading"><p class="eyebrow">1 · Define</p><h2 id="input-heading">Choose the exact value .NET should format</h2></div>
+        <form class="tool-form" method="get" action="/" aria-labelledby="input-heading" @onsubmit="Analyze" @onsubmit:preventDefault>
+                <h2 id="input-heading">Format a .NET value</h2>
                 <div class="field-grid">
                     <div class="field">
                         <label for="value-type">.NET type</label>
@@ -41,101 +40,87 @@
                         @if (showInputError) { <p id="input-value-error" class="field-error">@result.Error</p> }
                     </div>
                 </div>
-                <button type="submit" class="primary">Format with .NET</button>
-            </section>
-        </form>
-
-        <section class="results-panel" aria-labelledby="standards-heading">
-            <div class="panel-heading results-heading">
-                <div><p class="eyebrow">2 · Compare</p><h2 id="standards-heading">Standard formats, side by side</h2></div>
-                @if (result.Success) { <span class="success-badge">@DisplayType(valueType)</span> }
-            </div>
-            <div class="result-status @(result.Success ? "success" : showInputError ? "error" : "idle")" role="status" aria-live="polite">
-                @if (result.Success) { <strong>Parsed without losing precision.</strong><span><code>@result.ParsedValue</code></span> }
-                else if (showInputError) { <strong>That value cannot be parsed as @DisplayType(valueType).</strong><span>@result.Error</span> }
-                else { <strong>Ready for a complete value.</strong><span>Finish editing or submit to validate it.</span> }
-            </div>
-            @if (result.Success)
-            {
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="standard-format-caption">
-                    <table>
-                        <caption id="standard-format-caption">Standard formats for @DisplayType(valueType)</caption>
-                        <thead><tr><th scope="col">Format</th><th scope="col">Meaning</th><th scope="col">@CultureLabel</th><th scope="col">Invariant</th></tr></thead>
-                        <tbody>
-                            @foreach (var row in result.StandardFormats)
-                            {
-                                <tr><th scope="row"><button type="button" class="format-token" title="Use @row.Format" @onclick="() => UseFormat(row.Format)"><code>@row.Format</code></button></th><td>@row.Description</td><td><code>@row.CultureResult</code></td><td><code>@row.InvariantResult</code></td></tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </section>
-
-        <section class="custom-panel" aria-labelledby="custom-heading">
-            <div class="panel-heading"><p class="eyebrow">3 · Compose</p><h2 id="custom-heading">Build a custom format string</h2></div>
+            <section class="custom-panel" aria-label="Custom format tester">
             <div class="custom-grid">
                 <div class="field">
                     <label for="custom-format">Custom format</label>
-                    <p id="custom-format-hint" class="hint">Edit directly or insert a type-specific pattern below. Preview updates as you type.</p>
+                    <p id="custom-format-hint" class="hint">Enter a standard or custom format string. The result updates as you type.</p>
                     <input id="custom-format" name="custom-format" value="@customFormat" @oninput="UpdateCustomFormat" @onblur="TouchCustom"
                            autocapitalize="none" autocorrect="off" spellcheck="false"
                            aria-describedby="@(showCustomError ? "custom-format-hint custom-format-error" : "custom-format-hint")"
                            aria-invalid="@(showCustomError ? "true" : "false")" />
                     @if (showCustomError) { <p id="custom-format-error" class="field-error">@result.CustomError</p> }
                 </div>
-                <div class="preview-card" aria-live="off">
-                    <span>Live result · @CultureLabel</span>
+                <output class="preview-card" aria-live="off">
+                    <span>Output · @CultureLabel</span>
                     @if (!result.Success) { <code>Enter a valid @DisplayType(valueType) value</code> }
                     else if (string.IsNullOrEmpty(customFormat)) { <code>Enter or choose a format</code> }
                     else if (!string.IsNullOrEmpty(result.CustomError)) { <code>Format is incomplete or invalid</code> }
                     else { <code>@result.CustomResult</code> }
-                </div>
+                </output>
             </div>
-            <section class="token-reference" aria-labelledby="tokens-heading">
-                <h3 id="tokens-heading">Reference for @DisplayType(valueType)</h3>
+            <button type="submit" class="primary">Format with .NET</button>
+            </section>
+        </form>
+    </section>
+
+    <section class="results-panel" aria-labelledby="standards-heading">
+        <h2 id="standards-heading">Standard formats</h2>
+        <div class="result-status @(result.Success ? "success" : showInputError ? "error" : "idle")" role="status" aria-live="polite">
+            @if (result.Success) { <strong>Parsed as @DisplayType(valueType)</strong><span><code>@result.ParsedValue</code></span> }
+            else if (showInputError) { <strong>That value cannot be parsed as @DisplayType(valueType).</strong><span>@result.Error</span> }
+            else { <strong>Ready for a complete value.</strong><span>Finish editing or submit to validate it.</span> }
+        </div>
+        @if (result.Success)
+        {
+            <div class="table-scroll" tabindex="0" role="region" aria-labelledby="standard-format-caption">
+                <table>
+                    <caption id="standard-format-caption">Standard formats for @DisplayType(valueType)</caption>
+                    <thead><tr><th scope="col">Format</th><th scope="col">Meaning</th><th scope="col">@CultureLabel</th><th scope="col">Invariant</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in result.StandardFormats)
+                        {
+                            <tr><th scope="row"><button type="button" class="format-token" title="Use @row.Format" @onclick="() => UseFormat(row.Format)"><code>@row.Format</code></button></th><td>@row.Description</td><td><code>@row.CultureResult</code></td><td><code>@row.InvariantResult</code></td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <details class="reference token-reference">
+        <summary id="tokens-heading">Format token reference for @DisplayType(valueType)</summary>
+        <div class="disclosure-body">
                 <div class="token-grid">
                     @foreach (var token in result.Tokens)
                     {
                         <button type="button" class="token-card" @onclick="() => UseFormat(token.Example)"><code>@token.Token</code><span>@token.Description</span><small>@token.Example</small></button>
                     }
                 </div>
-            </section>
-        </section>
+        </div>
+    </details>
 
-        <section class="code-panel" aria-labelledby="code-heading">
-            <div class="panel-heading code-heading">
-                <div><p class="eyebrow">4 · Reproduce</p><h2 id="code-heading">Copy production-ready C#</h2></div>
-                <button type="button" class="secondary" @onclick="CopyCurrentCode">@copyState</button>
-            </div>
+    <details class="reference code-panel">
+        <summary id="code-heading">C# for this result</summary>
+        <div class="disclosure-body">
+            <button type="button" class="secondary" @onclick="CopyCurrentCode">@copyState</button>
             <div class="code-choices" role="group" aria-label="Generated C# style">
                 @foreach (var style in CodeStyles) { <button type="button" class="@(codeStyle == style.Id ? "active" : null)" aria-pressed="@(codeStyle == style.Id)" @onclick="() => codeStyle = style.Id">@style.Label</button> }
             </div>
             <pre tabindex="0"><code>@CurrentCode</code></pre>
-        </section>
-    </section>
-
-    <section class="reference" aria-labelledby="reference-heading">
-        <p class="eyebrow">Quick reference</p><h2 id="reference-heading">Format strings change presentation—not meaning</h2>
-        <p class="section-intro">This playground starts with a typed .NET value, then shows how format and culture transform its text. It parses numbers with invariant syntax so huge integers and decimals never pass through JavaScript or silently lose precision.</p>
-        <div class="reference-grid">
-            <article><h3>Standard formats</h3><p>Single-letter specifiers such as <code>N</code>, <code>C</code>, or <code>O</code> select a predefined representation. Their exact output can still depend on culture and type.</p></article>
-            <article><h3>Custom formats</h3><p>Patterns such as <code>#,##0.00</code> or <code>yyyy-MM-dd</code> compose individual tokens. The same character can mean something different for numbers, dates, and durations.</p></article>
-            <article><h3>Culture</h3><p>Culture supplies separators, symbols, names, grouping rules, and ordering. The invariant column makes every culture-dependent difference visible immediately.</p></article>
-            <article><h3>Exact types</h3><p><code>decimal</code>, <code>Int128</code>, and <code>BigInteger</code> are parsed and formatted inside .NET. No JavaScript <code>Number</code> conversion sits in the middle.</p></article>
         </div>
-        <aside class="handoff-card" aria-labelledby="datetime-heading"><h3 id="datetime-heading">Need to parse or convert a timestamp?</h3><p>This tool deliberately focuses on presentation. Use the <a href="https://datetime.swimburger.net">.NET DateTime Lab</a> to inspect <code>Kind</code>, offsets, time zones, ambiguous times, invalid times, and UTC conversions.</p></aside>
-        <aside class="docs-card" aria-labelledby="docs-heading">
-            <h3 id="docs-heading">Continue with the source documentation</h3>
-            <ul>
-                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/formatting-types">Formatting types in .NET</a></li>
-                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/standard-numeric-format-strings">Standard numeric format strings</a></li>
-                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-numeric-format-strings">Custom numeric format strings</a></li>
-                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings">Custom date and time format strings</a></li>
-                <li><a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-timespan-format-strings">Custom TimeSpan format strings</a></li>
-            </ul>
-        </aside>
-    </section>
+    </details>
+
+    <details class="reference">
+        <summary id="reference-heading">Formatting documentation</summary>
+        <div class="disclosure-body docs-links">
+            <a href="https://learn.microsoft.com/dotnet/standard/base-types/formatting-types">Formatting types in .NET</a> ·
+            <a href="https://learn.microsoft.com/dotnet/standard/base-types/standard-numeric-format-strings">Standard numeric formats</a> ·
+            <a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-numeric-format-strings">Custom numeric formats</a> ·
+            <a href="https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings">Date/time formats</a>
+            <p>Need to inspect or convert a timestamp? Use the <a href="https://datetime.swimburger.net">.NET Date and Time Tester</a>.</p>
+        </div>
+    </details>
 </main>
 
 @code {
